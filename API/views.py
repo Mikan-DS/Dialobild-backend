@@ -4,9 +4,11 @@ from django.conf import settings
 from django.http import JsonResponse, HttpResponseRedirect
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 from django.views.decorators.http import require_POST, require_GET
 from oauth2_provider.decorators import protected_resource
 
+from API.models import Project
 from users.models import User
 
 
@@ -30,9 +32,47 @@ def either_login_required(func):
     return wrapper
 
 
+@csrf_exempt
 @either_login_required
 def projects(request):
     # Здесь вы можете обработать данные POST
     user = request.user
-    data = {"username": user.username}
+    data = dict(map(lambda project: (project.id, project.name), user.projects.all()))
     return JsonResponse(data)
+
+
+@csrf_exempt
+@either_login_required
+def create_project(request, project_name=None):
+    if project_name is None:
+        if request.POST:
+            project_name = request.POST.get('project_name')
+        if request.GET:
+            project_name = request.GET.get('project_name')
+
+    if not project_name:
+        return JsonResponse({'error': "Project name not set"})
+
+    user = request.user
+
+    try:  # TODO добавить обработку ситуации когда у пользователя уже есть проект с таким названием
+        project = Project(name=project_name, owner=user)
+        project.save()
+    except Exception as e:
+        print(repr(e))
+        return JsonResponse({'error': "Something went wrong"})
+
+    return JsonResponse({'error': 0, 'project_name': project.name, 'project_id': project.id})
+
+@csrf_exempt
+@either_login_required
+def get_full_project_by_name(request, project_name):
+    return JsonResponse({'error': "not implemented"})
+@csrf_exempt
+@either_login_required
+def get_full_project_by_id(request, project_name):
+    return JsonResponse({'error': "not implemented"})
+
+
+def get_project(request, project):
+    return JsonResponse({'error': "not implemented"})

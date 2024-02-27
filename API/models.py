@@ -25,6 +25,8 @@ class Project(models.Model):
         verbose_name = 'Проект'
         verbose_name_plural = 'Проекты'
 
+        unique_together = ('name', 'owner')
+
     def __str__(self):
         return self.name
 
