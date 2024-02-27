@@ -1,6 +1,8 @@
+import typing
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.core import serializers
 from django.http import JsonResponse, HttpResponseRedirect
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect
@@ -8,7 +10,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 from django.views.decorators.http import require_POST, require_GET
 from oauth2_provider.decorators import protected_resource
 
-from API.models import Project
+from API.models import Project, Node, RuleType
 from users.models import User
 
 
@@ -67,12 +69,26 @@ def create_project(request, project_name=None):
 @csrf_exempt
 @either_login_required
 def get_full_project_by_name(request, project_name):
-    return JsonResponse({'error': "not implemented"})
+    project = Project.objects.filter(name = project_name, owner = request.user).first()
+    if project:
+        return get_project(request, project)
+    return JsonResponse({'error': "No project found"})
 @csrf_exempt
 @either_login_required
-def get_full_project_by_id(request, project_name):
-    return JsonResponse({'error': "not implemented"})
+def get_full_project_by_id(request, project_id):
+    project = Project.objects.filter(id = project_id, owner = request.user).first()
+    if project:
+        return get_project(request, project)
+    return JsonResponse({'error': "No project found"})
 
 
-def get_project(request, project):
-    return JsonResponse({'error': "not implemented"})
+def get_project(request, project: Project):
+
+    return JsonResponse({
+        'error': 0,
+        'project_name': project.name,
+        'nodes': project.nodes_json_format,
+        'nodeTypes': project.node_types_json_format,
+        'ruleTypes': project.rule_types_json_format,
+
+    })
