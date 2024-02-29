@@ -177,7 +177,7 @@ class Node(models.Model):
             )
 
         return {
-            'nodeType': self.node_type.name,
+            'nodeType': self.node_type.code,
             'content': self.content,
             'location': self.location,
             'id': self.id,
