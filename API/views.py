@@ -11,7 +11,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 from django.views.decorators.http import require_POST, require_GET
 from oauth2_provider.decorators import protected_resource
 
-from API.models import Project, Node, RuleType
+from API.models import Project, Node, RuleType, NodeRule
 from users.models import User
 
 
@@ -112,7 +112,7 @@ def save_project(request):
     except json.decoder.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-    project: Project
+    project: [Project, None] = None
 
     try:
         if data.get('project_name'):
@@ -132,6 +132,7 @@ def save_project(request):
 
 
     saving_nodes = data.get('nodes')
+    new_nodes = {}
     if not saving_nodes:
         return JsonResponse({'error': 'Missing parameter "nodes"'}, status=400)
 
@@ -155,6 +156,10 @@ def save_project(request):
                     node_entity.x, node_entity.y = node["location"]["x"], node["location"]["y"]
 
                     # TODO: save rules
+                    node_rules: typing.List[NodeRule] = node_entity.node_rules.all()
+                    for rule in node_rules:
+                        nodes_for_delete = node
+                        pass
 
                 node_entity.save()
             else:
@@ -166,6 +171,7 @@ def save_project(request):
                     project=project
                 )
                 node_entity.save()
+                new_nodes[node["id"]] = node_entity.id
 
         for node in nodes_for_delete:
             node_entity: Node = Node.objects.filter(id=int(node)).first()
@@ -181,5 +187,7 @@ def save_project(request):
         'error': 0,
         "project_name": project.name,
         "deleted": len(nodes_for_delete),
-        "modified": modified
+        "modified": modified,
+        "added": len(new_nodes),
+        "new_nodes_ids": new_nodes
     }, status=200)
