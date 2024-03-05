@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 
 from django.conf import settings
 from django.core import serializers
+from django.db.models import QuerySet
 from django.http import JsonResponse, HttpResponseRedirect
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect
@@ -112,7 +113,7 @@ def save_project(request):
     except json.decoder.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-    project: [Project, None] = None
+    project: typing.Union[Project, None] = None
 
     try:
         if data.get('project_name'):
@@ -140,6 +141,7 @@ def save_project(request):
     nodes_for_delete = list(map(lambda x: x.id, nodes))
 
     node_types = {i.code: i.id for i in project.get_avalaible_node_types()}
+    rule_types = {i.code: i.id for i in project.get_avalaible_rule_types()}
 
     modified = 0
 
@@ -147,7 +149,10 @@ def save_project(request):
         for node in saving_nodes:
             node_entity: Node = Node.objects.filter(id=int(node["id"])).first()
             if node_entity:
-                nodes_for_delete.remove(node["id"])
+                try:
+                    nodes_for_delete.remove(node["id"])
+                except ValueError:
+                    pass
 
                 if node_entity.get_js_format() != node:
                     modified += 1
@@ -156,10 +161,32 @@ def save_project(request):
                     node_entity.x, node_entity.y = node["location"]["x"], node["location"]["y"]
 
                     # TODO: save rules
-                    node_rules: typing.List[NodeRule] = node_entity.node_rules.all()
-                    for rule in node_rules:
-                        nodes_for_delete = node
-                        pass
+                    node_rules: QuerySet = node_entity.node_rules.filter(node=node_entity)
+                    rules_for_delete: typing.List[int] = list(map(lambda x: x.id, node_rules))
+                    for rule, nodes_links in node['rules'].items():
+
+                        if rule in rule_types.keys():
+                            rule_id = rule_types[rule]
+                        else:
+                            raise Exception('Unknown rule type')
+
+                        for node_link in nodes_links:
+                            rule_entity: NodeRule = node_rules.filter(
+                                connected_node_id=node_link).first()
+                            if rule_entity:
+                                try:
+                                    rules_for_delete.remove(rule_entity.id)
+                                except ValueError:
+                                    pass
+                                rule_entity.rule_id = rule_id # Обновление правила если между двумя узлами оно уже есть
+                                rule_entity.save()
+                            else:
+                                NodeRule.objects.create(node=node_entity, rule_id=rule_id, connected_node_id=node_link)
+
+                    else:
+                        for rule_d in rules_for_delete:
+                            node_rule: NodeRule = node_rules.filter(rule_id=rule_d).first()
+                            node_rule.delete()
 
                 node_entity.save()
             else:
@@ -173,6 +200,14 @@ def save_project(request):
                 node_entity.save()
                 new_nodes[node["id"]] = node_entity.id
 
+                for rule, nodes_links in node['rules'].items():
+
+                    if rule in rule_types.keys():
+                        rule_id = rule_types[rule]
+                    else:
+                        raise Exception('Unknown rule type')
+                    for node_link in nodes_links:
+                        NodeRule.objects.create(node=node_entity, rule_id=rule_id, connected_node_id=node_link)
         for node in nodes_for_delete:
             node_entity: Node = Node.objects.filter(id=int(node)).first()
             node_entity.delete()

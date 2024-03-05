@@ -213,5 +213,7 @@ class NodeRule(models.Model):
         verbose_name = 'Правило в узле'
         verbose_name_plural = 'Правила в узлах'
 
+        unique_together = ('node', 'connected_node')
+
     def __str__(self):
         return f"{self.node} - {self.rule} - {self.connected_node}"
