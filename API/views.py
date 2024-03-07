@@ -3,16 +3,13 @@ import typing
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.core import serializers
 from django.db.models import QuerySet
-from django.http import JsonResponse, HttpResponseRedirect
-from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.shortcuts import redirect
-from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
-from django.views.decorators.http import require_POST, require_GET
+from django.views.decorators.csrf import csrf_exempt
 from oauth2_provider.decorators import protected_resource
 
-from API.models import Project, Node, RuleType, NodeRule
+from API.models import Project, Node, NodeRule
 from users.models import User
 
 
@@ -160,7 +157,6 @@ def save_project(request):
                     node_entity.content = node["content"]
                     node_entity.x, node_entity.y = node["location"]["x"], node["location"]["y"]
 
-                    # TODO: save rules
                     node_rules: QuerySet = node_entity.node_rules.filter(node=node_entity)
                     rules_for_delete: typing.List[int] = list(map(lambda x: x.id, node_rules))
                     for rule, nodes_links in node['rules'].items():
