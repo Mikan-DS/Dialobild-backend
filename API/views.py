@@ -92,6 +92,7 @@ def get_project(request, project: Project):
         'nodes': project.nodes_json_format,
         'nodeTypes': project.node_types_json_format,
         'ruleTypes': project.rule_types_json_format,
+        'defaultRuleType': 'mustHave'
 
     })
 
@@ -131,7 +132,7 @@ def save_project(request):
 
     saving_nodes = data.get('nodes')
     new_nodes = {}
-    if not saving_nodes:
+    if saving_nodes == None:
         return JsonResponse({'error': 'Missing parameter "nodes"'}, status=400)
 
     nodes = project.nodes.all()
@@ -143,10 +144,15 @@ def save_project(request):
     modified = 0
 
     try:
+
+        rules_after_created = {}
+
         for node in saving_nodes:
-            node_entity: Node = Node.objects.filter(id=int(node["id"])).first()
+            node_entity: Node = nodes.filter(id=int(node["id"])).first()
             if node_entity:
                 try:
+                    if node_entity.x == 0 or node_entity.y == 0:
+                        continue
                     nodes_for_delete.remove(node["id"])
                 except ValueError:
                     pass
@@ -177,12 +183,23 @@ def save_project(request):
                                 rule_entity.rule_id = rule_id # Обновление правила если между двумя узлами оно уже есть
                                 rule_entity.save()
                             else:
-                                NodeRule.objects.create(node=node_entity, rule_id=rule_id, connected_node_id=node_link)
+                                connected_node: Node = nodes.filter(id=int(node_link)).first()
+                                if connected_node:
+                                    NodeRule.objects.create(
+                                        node=node_entity,
+                                        rule_id=rule_id,
+                                        connected_node=connected_node
+                                    )
+                                else:
+                                    if not int(node_link) in rules_after_created:
+                                        rules_after_created[int(node_link)] = []
+                                    rules_after_created[int(node_link)].append((node_entity.id, rule_id))
 
                     else:
                         for rule_d in rules_for_delete:
-                            node_rule: NodeRule = node_rules.filter(rule_id=rule_d).first()
-                            node_rule.delete()
+                            node_rule: NodeRule = node_rules.filter(id=rule_d).first()
+                            if node_rule:
+                                node_rule.delete()
 
                 node_entity.save()
             else:
@@ -194,7 +211,7 @@ def save_project(request):
                     project=project
                 )
                 node_entity.save()
-                new_nodes[node["id"]] = node_entity.id
+                new_nodes[int(node["id"])] = node_entity.id
 
                 for rule, nodes_links in node['rules'].items():
 
@@ -203,7 +220,22 @@ def save_project(request):
                     else:
                         raise Exception('Unknown rule type')
                     for node_link in nodes_links:
-                        NodeRule.objects.create(node=node_entity, rule_id=rule_id, connected_node_id=node_link)
+                        # NodeRule.objects.create(node=node_entity, rule_id=rule_id, connected_node_id=node_link)
+                        # connected_id = new_nodes[int(node_link)] if int(node_link) in new_nodes else
+                        connected_node: Node = nodes.filter(id=int(node_link)).first()
+                        if connected_node:
+                            NodeRule.objects.create(
+                                node=node_entity,
+                                rule_id=rule_id,
+                                connected_node=connected_node
+                            )
+                        else:
+                            if not int(node_link) in rules_after_created:
+                                rules_after_created[int(node_link)] = []
+                            rules_after_created[int(node_link)].append((node_entity.id, rule_id))
+                if node["id"] in rules_after_created.keys():
+                    for node_id, rule_id in rules_after_created[node_entity.id]:
+                        NodeRule.objects.create(connected_node=node_entity, rule_id=rule_id, node_id=node_id)
         for node in nodes_for_delete:
             node_entity: Node = Node.objects.filter(id=int(node)).first()
             node_entity.delete()
