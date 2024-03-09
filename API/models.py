@@ -1,10 +1,11 @@
 import typing
 
 from colorfield.fields import ColorField
-# from django.contrib.auth.models import User
-from users.models import User
 from django.core.validators import RegexValidator
 from django.db import models
+
+# from django.contrib.auth.models import User
+from users.models import User
 
 
 class Project(models.Model):
@@ -50,6 +51,7 @@ class Project(models.Model):
     def rule_types_json_format(self):
         return list(map(lambda rule_type: rule_type.get_js_format(), self.get_avalaible_rule_types()))
 
+
 class NodeType(models.Model):
     id = models.AutoField(
         primary_key=True,
@@ -85,12 +87,12 @@ class NodeType(models.Model):
         return self.name
 
     def get_js_format(self) -> dict:
-
         return {
             'code': self.code,
             'name': self.name,
             'color': self.color
         }
+
 
 class RuleType(models.Model):
     id = models.AutoField(
@@ -101,7 +103,6 @@ class RuleType(models.Model):
         max_length=60,
         verbose_name='Название'
     )
-
     code = models.SlugField(
         max_length=60,
         verbose_name='Кодовое обозначение',
@@ -112,6 +113,16 @@ class RuleType(models.Model):
                 message='Кодовое обозначение должно быть на латинице и без пробелов',
             ),
         ]
+    )
+    color = ColorField(
+        max_length=9,
+        verbose_name='Цвет',
+        default='#3F3'
+    )
+    arrow_style = models.CharField(
+        max_length=8,
+        verbose_name='Стиль стрелки',
+        default='solid'
     )
 
     class Meta:
@@ -124,7 +135,9 @@ class RuleType(models.Model):
     def get_js_format(self) -> dict:
         return {
             'code': self.code,
-            'name': self.name
+            'name': self.name,
+            'color': self.color,
+            'arrowStyle': self.arrow_style
         }
 
 
@@ -166,10 +179,9 @@ class Node(models.Model):
     def __str__(self):
         return self.content[:50] + '...' if len(self.content) > 50 else self.content
 
-
     def get_js_format(self) -> dict:
-
-        rules: typing.Dict[str, typing.List] = dict(map(lambda rule_type: (rule_type.code, []), self.project.get_avalaible_rule_types()))
+        rules: typing.Dict[str, typing.List] = dict(
+            map(lambda rule_type: (rule_type.code, []), self.project.get_avalaible_rule_types()))
 
         for rule in self.node_rules.all():
             rules[rule.rule.code].append(
@@ -177,7 +189,7 @@ class Node(models.Model):
             )
 
         return {
-            'nodeType': self.node_type.name,
+            'nodeType': self.node_type.code,
             'content': self.content,
             'location': self.location,
             'id': self.id,
@@ -212,6 +224,8 @@ class NodeRule(models.Model):
     class Meta:
         verbose_name = 'Правило в узле'
         verbose_name_plural = 'Правила в узлах'
+
+        unique_together = ('node', 'connected_node')
 
     def __str__(self):
         return f"{self.node} - {self.rule} - {self.connected_node}"
