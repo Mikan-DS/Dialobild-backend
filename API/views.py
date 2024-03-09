@@ -238,7 +238,8 @@ def save_project(request):
                         NodeRule.objects.create(connected_node=node_entity, rule_id=rule_id, node_id=node_id)
         for node in nodes_for_delete:
             node_entity: Node = Node.objects.filter(id=int(node)).first()
-            node_entity.delete()
+            if node_entity:
+                node_entity.delete()
 
 
     except Exception as e:
