@@ -1,4 +1,5 @@
 import json
+import re
 import typing
 from urllib.parse import urlencode
 
@@ -92,25 +93,12 @@ def get_project(request, project: Project):
         'nodes': project.nodes_json_format,
         'nodeTypes': project.node_types_json_format,
         'ruleTypes': project.rule_types_json_format,
-        'defaultRuleType': 'mustHave'
+        'defaultRuleType': project.default_rule_type.code
 
     })
 
 
-@csrf_exempt
-@either_login_required
-def save_project(request):
-    try:
-        if request.POST:
-            data: typing.Dict = request.POST
-        else:
-            data_encoded = request.body.decode("utf-8")
-            data: typing.Dict = json.loads(data_encoded)
-    except UnicodeDecodeError:
-        return JsonResponse({'error': 'Invalid Data'}, status=400)
-    except json.decoder.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
+def get_project_from_request(data):
     project: typing.Union[Project, None] = None
 
     try:
@@ -128,7 +116,33 @@ def save_project(request):
     if not project:
         return JsonResponse({'error': 'Missing parameter "project_name" or "project_id"'}, status=400)
 
+    return project
 
+
+def get_json_from_request(request):
+    try:
+        if request.POST:
+            data: typing.Dict = request.POST
+        else:
+            data_encoded = request.body.decode("utf-8")
+            data: typing.Dict = json.loads(data_encoded)
+    except UnicodeDecodeError:
+        return JsonResponse({'error': 'Invalid Data'}, status=400)
+    except json.decoder.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    return data
+
+
+@csrf_exempt
+@either_login_required
+def save_project(request):
+    data: typing.Dict = get_json_from_request(request)
+    if isinstance(data, JsonResponse):
+        return data
+    project: typing.Union[Project, JsonResponse] = get_project_from_request(data)
+    if isinstance(project, JsonResponse):
+        return project
 
     saving_nodes = data.get('nodes')
     new_nodes = {}
@@ -180,7 +194,7 @@ def save_project(request):
                                     rules_for_delete.remove(rule_entity.id)
                                 except ValueError:
                                     pass
-                                rule_entity.rule_id = rule_id # Обновление правила если между двумя узлами оно уже есть
+                                rule_entity.rule_id = rule_id  # Обновление правила если между двумя узлами оно уже есть
                                 rule_entity.save()
                             else:
                                 connected_node: Node = nodes.filter(id=int(node_link)).first()
@@ -255,3 +269,82 @@ def save_project(request):
         "added": len(new_nodes),
         "new_nodes_ids": new_nodes
     }, status=200)
+
+
+node_string_re = re.compile(r'(?:<([^>]+)>)?(.+)')
+
+
+def place_and_move_other_nodes(node, nodes):
+    conflict_node = nodes.filter(x=node.x).exclude(id=node.id).first()
+    if conflict_node:
+        conflict_node.x += 1
+        conflict_node.save()
+        nodes_mod = {conflict_node}
+        nodes: typing.Set[Node] = place_and_move_other_nodes(conflict_node, nodes)
+        nodes_mod.update(nodes)
+        return nodes_mod
+    return set()
+
+
+@csrf_exempt
+@either_login_required
+def add_raw_nodes(request):
+    data: typing.Dict = get_json_from_request(request)
+    if isinstance(data, JsonResponse):
+        return data
+    project: typing.Union[Project, JsonResponse] = get_project_from_request(data)
+    if isinstance(project, JsonResponse):
+        return project
+
+    parent_id = data.get("active_node")
+    if not parent_id:
+        return JsonResponse({"error": "Missing active node"}, status=400)
+
+    parent: Node = Node.objects.filter(id=parent_id).first()
+
+    text = data.get("text")
+    lines = text.split("\n")
+
+    node_types = project.get_avalaible_node_types()
+    rule = project.default_rule_type
+    x = parent.x - 1
+
+    project_nodes = project.nodes.all()
+
+    nodes_modified = set()
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        last_parent = parent
+        x += 1
+        for node_info in line.split("|"):
+            node_info = node_info.strip()
+            if not node_info:
+                continue
+            node_type, node_text = node_string_re.match(node_info).groups()
+            node_type_entity = node_types.filter(code=node_type.strip()).first()
+            if not node_type_entity:
+                node_type_entity = node_types.first()
+            node_entity = Node.objects.create(
+                project=project,
+                content=node_text.strip(),
+                node_type=node_type_entity,
+                x=x,
+                y=last_parent.y + 1
+            )
+
+            nodes_modified.add(node_entity)
+            nodes_modified.update(place_and_move_other_nodes(node_entity, project_nodes.filter(y=node_entity.y).all()))
+
+            NodeRule.objects.create(node=node_entity, rule=rule, connected_node=last_parent)
+            last_parent = node_entity
+
+    return JsonResponse({"error": 0,
+
+                         "update": [
+                             node.get_js_format() for node in nodes_modified
+                         ]
+
+                         }, status=200)

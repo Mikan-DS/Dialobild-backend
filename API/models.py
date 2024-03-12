@@ -51,6 +51,9 @@ class Project(models.Model):
     def rule_types_json_format(self):
         return list(map(lambda rule_type: rule_type.get_js_format(), self.get_avalaible_rule_types()))
 
+    @property
+    def default_rule_type(self):
+        return RuleType.objects.filter(code='mustHave').first()
 
 class NodeType(models.Model):
     id = models.AutoField(
