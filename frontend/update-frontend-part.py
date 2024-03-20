@@ -12,11 +12,11 @@ js_files = glob.glob('build/static/js/*.js')
 
 # Копируем файлы в нужную директорию
 for file in js_files:
-    shutil.copy(file, '../static/js/dialobuild-app.js')
+    shutil.copy(file, '../static/frontend/js/dialobild-app.js')
 
 # Получаем список файлов в директории
 css_files = glob.glob('build/static/css/*.css')
 
 # Копируем файлы в нужную директорию
 for file in js_files:
-    shutil.copy(file, '../static/css/dialobuild-app.css')
+    shutil.copy(file, '../static/frontend/css/dialobild-app.css')
