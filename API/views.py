@@ -324,6 +324,7 @@ def add_raw_nodes(request):
             if not node_info:
                 continue
             node_type, node_text = node_string_re.match(node_info).groups()
+            node_type = node_type or ""
             node_type_entity = node_types.filter(code=node_type.strip()).first()
             if not node_type_entity:
                 node_type_entity = node_types.first()
@@ -342,9 +343,5 @@ def add_raw_nodes(request):
             last_parent = node_entity
 
     return JsonResponse({"error": 0,
-
-                         "update": [
-                             node.get_js_format() for node in nodes_modified
-                         ]
-
+                         "update": [node.get_js_format() for node in nodes_modified]
                          }, status=200)
